@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import type { Bench, BenchExperience, MaterialType, OrientationType, ShadeLevelType, NoiseLevelType, StayDurationType } from '@/types';
+import type { Bench, BenchExperience, MaterialType, OrientationType, ShadeLevelType, NoiseLevelType } from '@/types';
 import { loadBenches, saveBenches } from '@/utils/storage';
 import { generateId } from '@/utils/comfort';
+import { buildMergePatch, getActiveBenches } from '@/utils/mergeRules';
 import { mockBenches } from '@/data/mockBenches';
 
 interface BenchState {
@@ -29,6 +30,8 @@ interface BenchActions {
   addExperience: (benchId: string, experience: Omit<BenchExperience, 'id' | 'benchId'>) => void;
   updateExperience: (benchId: string, expId: string, updates: Partial<BenchExperience>) => void;
   deleteExperience: (benchId: string, expId: string) => void;
+  mergeBenches: (selectedIds: string[], masterId: string) => { ok: boolean; error?: string; masterId?: string };
+  getActiveBenches: () => Bench[];
   getFilteredBenches: () => Bench[];
 }
 
@@ -152,10 +155,39 @@ export const useBenchStore = create<BenchState & BenchActions>((set, get) => ({
     saveBenches(newBenches);
   },
 
+  mergeBenches: (selectedIds, masterId) => {
+    const mergedAt = new Date().toISOString();
+    const patch = buildMergePatch(get().benches, selectedIds, masterId, mergedAt);
+    if (!patch) {
+      return { ok: false, error: '合并条件不满足，操作已取消' };
+    }
+
+    const mergedIdSet = new Set(patch.mergedIds);
+    const newBenches = get().benches.map((bench) => {
+      if (bench.id === masterId) {
+        return { ...bench, ...patch.masterUpdate };
+      }
+      if (mergedIdSet.has(bench.id)) {
+        return {
+          ...bench,
+          mergedIntoId: masterId,
+          updatedAt: mergedAt,
+        };
+      }
+      return bench;
+    });
+
+    set({ benches: newBenches });
+    saveBenches(newBenches);
+    return { ok: true, masterId };
+  },
+
+  getActiveBenches: () => getActiveBenches(get().benches),
+
   getFilteredBenches: () => {
     const { benches, searchQuery, materialFilter, orientationFilter, shadeFilter, noiseFilter } = get();
-    
-    return benches.filter((bench) => {
+
+    return getActiveBenches(benches).filter((bench) => {
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         const matchName = bench.name.toLowerCase().includes(query);

@@ -13,6 +13,14 @@ export interface BenchExperience {
   rating: number;
 }
 
+/** 被合并档案的来源记录（只保留展示与溯源所需的摘要） */
+export interface MergedSource {
+  id: string;
+  name: string;
+  location: string;
+  mergedAt: string;
+}
+
 export interface Bench {
   id: string;
   name: string;
@@ -30,6 +38,10 @@ export interface Bench {
   experiences: BenchExperience[];
   createdAt: string;
   updatedAt: string;
+  /** 是否已被合并进其他主档；被合并记录不会出现在列表、地图和排行中 */
+  mergedIntoId?: string;
+  /** 作为主档时，记录被并入的档案摘要 */
+  mergedSources?: MergedSource[];
 }
 
 export const MATERIAL_LABELS: Record<MaterialType, string> = {

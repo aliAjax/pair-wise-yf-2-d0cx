@@ -31,14 +31,24 @@ import type {
 } from '@/types';
 import Rating from '@/components/Rating/Rating';
 import { generateId } from '@/utils/comfort';
+import { resolveBenchId } from '@/utils/mergeRules';
 
 export default function AddEditPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isEdit = !!id;
 
-  const { getBenchById, addBench, updateBench, initialize, initialized, addExperience, updateExperience, deleteExperience } = useBenchStore();
-  const existingBench = id ? getBenchById(id) : undefined;
+  const { benches, getBenchById, addBench, updateBench, initialize, initialized, addExperience, updateExperience, deleteExperience } = useBenchStore();
+
+  // 被合并记录不可编辑，旧编辑链接转到主档
+  const resolvedId = initialized && isEdit ? resolveBenchId(benches, id) : id;
+  useEffect(() => {
+    if (initialized && isEdit && resolvedId !== undefined && resolvedId !== id) {
+      navigate(`/edit/${resolvedId}`, { replace: true });
+    }
+  }, [initialized, isEdit, resolvedId, id, navigate]);
+
+  const existingBench = resolvedId ? getBenchById(resolvedId) : undefined;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -108,8 +118,8 @@ export default function AddEditPage() {
 
   const handleDeleteExperience = (expId: string) => {
     setExperiences(experiences.filter((exp) => exp.id !== expId));
-    if (isEdit && id) {
-      deleteExperience(id, expId);
+    if (isEdit && resolvedId) {
+      deleteExperience(resolvedId, expId);
     }
   };
 
@@ -125,14 +135,14 @@ export default function AddEditPage() {
       return;
     }
 
-    if (isEdit && id) {
-      updateBench(id, formData);
+    if (isEdit && resolvedId) {
+      updateBench(resolvedId, formData);
       experiences.forEach((exp) => {
         const existingExp = existingBench?.experiences.find((e) => e.id === exp.id);
         if (existingExp) {
-          updateExperience(id, exp.id, exp);
+          updateExperience(resolvedId, exp.id, exp);
         } else {
-          addExperience(id, exp);
+          addExperience(resolvedId, exp);
         }
       });
     } else {
@@ -399,7 +409,7 @@ export default function AddEditPage() {
 
             {experiences.length > 0 ? (
               <div className="space-y-4">
-                {experiences.map((exp, index) => {
+                {experiences.map((exp) => {
                   const TimeIcon = timePeriodIcons[exp.timePeriod];
                   return (
                     <div

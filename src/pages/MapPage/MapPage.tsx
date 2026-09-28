@@ -6,7 +6,7 @@ import { calculateComfortScore, getComfortColor } from '@/utils/comfort';
 import type { Bench } from '@/types';
 
 export default function MapPage() {
-  const { benches, initialize, initialized } = useBenchStore();
+  const { getActiveBenches, initialize, initialized } = useBenchStore();
   const navigate = useNavigate();
   const [hoveredBench, setHoveredBench] = useState<Bench | null>(null);
 
@@ -15,6 +15,8 @@ export default function MapPage() {
       initialize();
     }
   }, [initialized, initialize]);
+
+  const benches = getActiveBenches();
 
   const getPositionStyle = (bench: Bench) => {
     const latRange = { min: 31.22, max: 31.25 };

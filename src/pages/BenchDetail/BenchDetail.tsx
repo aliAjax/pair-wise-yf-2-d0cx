@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
   MapPin,
@@ -14,6 +14,7 @@ import {
   Sunset,
   Moon,
   CloudSun,
+  GitMerge,
 } from 'lucide-react';
 import { useBenchStore } from '@/store/useBenchStore';
 import {
@@ -27,11 +28,19 @@ import {
 import type { TimePeriodType } from '@/types';
 import Rating from '@/components/Rating/Rating';
 import { calculateComfortScore, getComfortLevel, getComfortColor } from '@/utils/comfort';
+import { resolveBenchId } from '@/utils/mergeRules';
+
+interface RedirectState {
+  fromMerge?: boolean;
+  fromId?: string;
+}
 
 export default function BenchDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getBenchById, deleteBench, initialize, initialized } = useBenchStore();
+  const location = useLocation();
+  const redirectState = (location.state ?? {}) as RedirectState;
+  const { benches, getBenchById, deleteBench, initialize, initialized } = useBenchStore();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
@@ -40,13 +49,23 @@ export default function BenchDetail() {
     }
   }, [initialized, initialize]);
 
-  const bench = id ? getBenchById(id) : undefined;
+  // 被合并记录的旧链接统一转到主档，并附上来源说明
+  const resolvedId = initialized ? resolveBenchId(benches, id) : id;
+  const wasMergedLink = initialized && !!id && resolvedId !== undefined && resolvedId !== id;
 
   useEffect(() => {
-    if (bench === undefined && initialized) {
-      navigate('/');
+    if (!initialized) return;
+    if (resolvedId === undefined) {
+      navigate('/', { replace: true });
+    } else if (wasMergedLink) {
+      navigate(`/bench/${resolvedId}`, {
+        replace: true,
+        state: { fromMerge: true, fromId: id },
+      });
     }
-  }, [bench, initialized, navigate]);
+  }, [initialized, resolvedId, wasMergedLink, id, navigate]);
+
+  const bench = resolvedId ? getBenchById(resolvedId) : undefined;
 
   if (!bench) {
     return (
@@ -76,11 +95,15 @@ export default function BenchDetail() {
   });
 
   const handleDelete = () => {
-    if (id) {
-      deleteBench(id);
+    if (resolvedId) {
+      deleteBench(resolvedId);
       navigate('/');
     }
   };
+
+  const redirectedSource = redirectState.fromMerge && redirectState.fromId
+    ? benches.find((item) => item.id === redirectState.fromId)
+    : undefined;
 
   return (
     <div className="container mx-auto px-4 py-6">
@@ -91,6 +114,33 @@ export default function BenchDetail() {
         <ArrowLeft className="w-4 h-4" />
         <span className="text-sm">返回</span>
       </button>
+
+      {(redirectedSource || (bench?.mergedSources?.length ?? 0) > 0) && (
+        <div className="mb-6 rounded-xl bg-moss-green/10 border border-moss-green/30 p-4 fade-in">
+          <div className="flex items-start gap-2.5">
+            <GitMerge className="w-4 h-4 text-moss-green mt-0.5 flex-shrink-0" />
+            <div className="text-sm">
+              {redirectedSource && (
+                <p className="text-deep-brown mb-1">
+                  你访问的旧档案「{redirectedSource.name}」已合并到当前主档，
+                  以下为合并后的完整信息。
+                </p>
+              )}
+              {bench?.mergedSources && bench.mergedSources.length > 0 && (
+                <div className="text-ink-light text-xs">
+                  <span className="font-medium text-deep-brown">合并来源：</span>
+                  {bench.mergedSources.map((source, index) => (
+                    <span key={source.id}>
+                      {index > 0 && '、'}
+                      「{source.name}」（{source.location}）
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
@@ -195,7 +245,7 @@ export default function BenchDetail() {
                 <div className="flex-1" />
 
                 <button
-                  onClick={() => navigate(`/edit/${bench.id}`)}
+                  onClick={() => navigate(`/edit/${resolvedId}`)}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-moss-green hover:bg-moss-green/10 rounded-lg transition-colors"
                 >
                   <Edit3 className="w-4 h-4" />
@@ -279,6 +329,10 @@ export default function BenchDetail() {
               <div className="flex justify-between">
                 <span className="text-ink-light">时段记录</span>
                 <span className="text-deep-brown">{bench.experiences.length} 条</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-ink-light">合并来源</span>
+                <span className="text-deep-brown">{bench.mergedSources?.length ?? 0} 条</span>
               </div>
             </div>
           </div>
