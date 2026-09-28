@@ -39,6 +39,7 @@ export default function AddEditPage() {
 
   const { getBenchById, addBench, updateBench, initialize, initialized, addExperience, updateExperience, deleteExperience } = useBenchStore();
   const existingBench = id ? getBenchById(id) : undefined;
+  const isMergedTarget = !!existingBench?.mergedInto;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -62,6 +63,19 @@ export default function AddEditPage() {
       initialize();
     }
   }, [initialized, initialize]);
+
+  // 已合并记录不可编辑，旧链接转到主档并说明来源
+  useEffect(() => {
+    if (initialized && isEdit && isMergedTarget && existingBench?.mergedInto) {
+      navigate(`/bench/${existingBench.mergedInto.benchmarkId}`, {
+        replace: true,
+        state: {
+          redirectedFrom: { id, name: existingBench.name },
+        },
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialized, isEdit, isMergedTarget]);
 
   useEffect(() => {
     if (isEdit && existingBench && initialized) {
@@ -399,7 +413,7 @@ export default function AddEditPage() {
 
             {experiences.length > 0 ? (
               <div className="space-y-4">
-                {experiences.map((exp, index) => {
+                {experiences.map((exp) => {
                   const TimeIcon = timePeriodIcons[exp.timePeriod];
                   return (
                     <div

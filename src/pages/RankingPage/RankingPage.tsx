@@ -4,10 +4,9 @@ import { Trophy, MapPin, Star, Crown, Medal, Award } from 'lucide-react';
 import { useBenchStore } from '@/store/useBenchStore';
 import { calculateComfortScore, getComfortLevel, getComfortColor } from '@/utils/comfort';
 import { MATERIAL_LABELS, SHADE_LABELS } from '@/types';
-import type { Bench } from '@/types';
 
 export default function RankingPage() {
-  const { benches, initialize, initialized } = useBenchStore();
+  const { getActiveBenches, initialize, initialized } = useBenchStore();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -15,6 +14,9 @@ export default function RankingPage() {
       initialize();
     }
   }, [initialized, initialize]);
+
+  // 已合并记录不参与排行
+  const benches = getActiveBenches();
 
   const rankedBenches = [...benches]
     .sort((a, b) => calculateComfortScore(b) - calculateComfortScore(a))

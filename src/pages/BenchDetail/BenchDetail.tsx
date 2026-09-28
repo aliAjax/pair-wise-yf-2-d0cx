@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
   MapPin,
@@ -14,6 +14,8 @@ import {
   Sunset,
   Moon,
   CloudSun,
+  GitMerge,
+  X,
 } from 'lucide-react';
 import { useBenchStore } from '@/store/useBenchStore';
 import {
@@ -24,15 +26,22 @@ import {
   STAY_DURATION_LABELS,
   TIME_PERIOD_LABELS,
 } from '@/types';
-import type { TimePeriodType } from '@/types';
+import type { TimePeriodType, Bench } from '@/types';
 import Rating from '@/components/Rating/Rating';
 import { calculateComfortScore, getComfortLevel, getComfortColor } from '@/utils/comfort';
+
+interface RedirectLocationState {
+  redirectedFrom?: { id: string; name: string };
+}
 
 export default function BenchDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getBenchById, deleteBench, initialize, initialized } = useBenchStore();
+  const location = useLocation();
+  const locationState = (location.state ?? null) as RedirectLocationState | null;
+  const { resolveBenchById, deleteBench, initialize, initialized } = useBenchStore();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [dismissRedirect, setDismissRedirect] = useState(false);
 
   useEffect(() => {
     if (!initialized) {
@@ -40,13 +49,29 @@ export default function BenchDetail() {
     }
   }, [initialized, initialize]);
 
-  const bench = id ? getBenchById(id) : undefined;
+  const resolved = id ? resolveBenchById(id) : { bench: undefined, wasMerged: false };
+  const bench = resolved.bench as Bench | undefined;
+  const redirectedSource = resolved.wasMerged ? resolved.sourceBench : undefined;
 
+  // 旧链接：被合并记录直接跳到主档（主档丢失则回列表）
   useEffect(() => {
-    if (bench === undefined && initialized) {
+    if (!initialized || !id) return;
+    if (resolved.wasMerged) {
+      if (resolved.bench) {
+        navigate(`/bench/${resolved.bench.id}`, {
+          replace: true,
+          state: {
+            redirectedFrom: { id, name: resolved.sourceBench?.name ?? '该档案' },
+          },
+        });
+      } else {
+        navigate('/', { replace: true });
+      }
+    } else if (resolved.bench === undefined) {
       navigate('/');
     }
-  }, [bench, initialized, navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialized, id, resolved.wasMerged, resolved.bench?.id]);
 
   if (!bench) {
     return (
@@ -82,6 +107,10 @@ export default function BenchDetail() {
     }
   };
 
+  const redirectedFromName =
+    redirectedSource?.name ?? locationState?.redirectedFrom?.name ?? null;
+  const mergeSources = bench?.mergeSources ?? [];
+
   return (
     <div className="container mx-auto px-4 py-6">
       <button
@@ -91,6 +120,27 @@ export default function BenchDetail() {
         <ArrowLeft className="w-4 h-4" />
         <span className="text-sm">返回</span>
       </button>
+
+      {redirectedFromName && !dismissRedirect && (
+        <div className="mb-4 flex items-start gap-3 p-4 bg-ochre/10 border border-ochre/25 rounded-lg fade-in">
+          <GitMerge className="w-5 h-5 text-ochre flex-shrink-0 mt-0.5" />
+          <div className="flex-1 text-sm">
+            <p className="font-medium text-deep-brown">
+              「{redirectedFromName}」已合并到当前主档
+            </p>
+            <p className="text-ink-light mt-0.5">
+              这张长椅的名称、位置与体验已并入下方档案，旧链接自动转到这里。
+            </p>
+          </div>
+          <button
+            onClick={() => setDismissRedirect(true)}
+            className="p-1 text-ink-light hover:text-deep-brown flex-shrink-0"
+            aria-label="关闭提示"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
@@ -282,6 +332,28 @@ export default function BenchDetail() {
               </div>
             </div>
           </div>
+
+          {mergeSources.length > 0 && (
+            <div className="paper-texture rounded-xl shadow-paper p-6 fade-in opacity-0 stagger-3">
+              <div className="flex items-center gap-2 mb-3">
+                <GitMerge className="w-4 h-4 text-ochre" />
+                <h3 className="font-serif text-sm font-semibold text-deep-brown">
+                  合并来源（{mergeSources.length}）
+                </h3>
+              </div>
+              <ul className="space-y-2 text-sm">
+                {mergeSources.map((source) => (
+                  <li key={source.benchId} className="p-2.5 bg-warm-cream/60 rounded-lg">
+                    <div className="font-medium text-deep-brown text-sm">{source.name}</div>
+                    <div className="text-xs text-ink-light mt-0.5">{source.location}</div>
+                    <div className="text-xs text-ink-light/60 mt-1">
+                      于 {new Date(source.mergedAt).toLocaleDateString('zh-CN')} 并入本档
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
 

@@ -13,6 +13,21 @@ export interface BenchExperience {
   rating: number;
 }
 
+/** 主档上记录的来源说明：哪些已合并档案的内容汇入了本档 */
+export interface MergeSource {
+  benchId: string;
+  name: string;
+  location: string;
+  mergedAt: string;
+}
+
+/** 已合并档案的跳转标记：原档案指向的主档 */
+export interface MergedInto {
+  benchmarkId: string;
+  benchmarkName: string;
+  mergedAt: string;
+}
+
 export interface Bench {
   id: string;
   name: string;
@@ -30,6 +45,10 @@ export interface Bench {
   experiences: BenchExperience[];
   createdAt: string;
   updatedAt: string;
+  /** 非空表示该档案已被合并，访问时应跳转到主档 */
+  mergedInto?: MergedInto | null;
+  /** 主档专属：汇入本档的来源档案列表 */
+  mergeSources?: MergeSource[];
 }
 
 export const MATERIAL_LABELS: Record<MaterialType, string> = {

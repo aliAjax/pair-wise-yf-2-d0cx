@@ -1,8 +1,15 @@
 import { create } from 'zustand';
-import type { Bench, BenchExperience, MaterialType, OrientationType, ShadeLevelType, NoiseLevelType, StayDurationType } from '@/types';
+import type { Bench, BenchExperience, MaterialType, OrientationType, ShadeLevelType, NoiseLevelType } from '@/types';
 import { loadBenches, saveBenches } from '@/utils/storage';
 import { generateId } from '@/utils/comfort';
 import { mockBenches } from '@/data/mockBenches';
+import {
+  isMergedBench,
+  buildMergePlan,
+  applyMergePlan,
+  resolveBench,
+} from '@/utils/merge';
+import type { ResolvedBench } from '@/utils/merge';
 
 interface BenchState {
   benches: Bench[];
@@ -26,6 +33,9 @@ interface BenchActions {
   updateBench: (id: string, updates: Partial<Bench>) => void;
   deleteBench: (id: string) => void;
   getBenchById: (id: string) => Bench | undefined;
+  getActiveBenches: () => Bench[];
+  resolveBenchById: (id: string) => ResolvedBench;
+  mergeBenches: (selectedIds: string[], primaryId: string) => void;
   addExperience: (benchId: string, experience: Omit<BenchExperience, 'id' | 'benchId'>) => void;
   updateExperience: (benchId: string, expId: string, updates: Partial<BenchExperience>) => void;
   deleteExperience: (benchId: string, expId: string) => void;
@@ -103,6 +113,23 @@ export const useBenchStore = create<BenchState & BenchActions>((set, get) => ({
     return get().benches.find((bench) => bench.id === id);
   },
 
+  getActiveBenches: () => {
+    return get().benches.filter((bench) => !isMergedBench(bench));
+  },
+
+  resolveBenchById: (id) => {
+    return resolveBench(get().benches, id);
+  },
+
+  mergeBenches: (selectedIds, primaryId) => {
+    const currentBenches = get().benches;
+    // 规则层校验：数量、已合并记录混入等情况在此抛出
+    const plan = buildMergePlan(currentBenches, selectedIds, primaryId);
+    const newBenches = applyMergePlan(currentBenches, plan);
+    set({ benches: newBenches });
+    saveBenches(newBenches);
+  },
+
   addExperience: (benchId, experienceData) => {
     const newExperience: BenchExperience = {
       ...experienceData,
@@ -154,8 +181,11 @@ export const useBenchStore = create<BenchState & BenchActions>((set, get) => ({
 
   getFilteredBenches: () => {
     const { benches, searchQuery, materialFilter, orientationFilter, shadeFilter, noiseFilter } = get();
-    
+
     return benches.filter((bench) => {
+      // 已合并记录不出现在列表中
+      if (isMergedBench(bench)) return false;
+
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         const matchName = bench.name.toLowerCase().includes(query);
